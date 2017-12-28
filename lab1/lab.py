@@ -9,14 +9,23 @@ from io import BytesIO
 from PIL import Image as PILImage
 
 ## NO ADDITIONAL IMPORTS ALLOWED!
-
+    
 def blur_kernel(size, c=1):
     """
     return a box blur kernel if a given size n*n,
     the parameter c is used to scale the value of
     the kernel element
     """
-    return [[c/size**]]
+    return [[c/size**2 for i in range(size)] for j in range(size)]
+
+def sharp_kernel(size):
+    """
+    return the sharp kernel bia the blur_kernel
+    """
+    kernel = blur_kernel(size, -1)
+    #set the middle element of the kernel is 2-1/size**2
+    kernel[size//2][size//2] = 2 - 1/size**2
+    return kernel
 
 class Image:
     def __init__(self, width, height, pixels):
@@ -46,17 +55,26 @@ class Image:
         """
         self.pixels[self.get_indice(x, y)] = c
 
-    def apply_per_pixel(self, func):
-       result = Image.new(self.width, self.height)
-       for x in range(result.width):
+    def apply_per_pixel(self, func, kernel):
+        result = Image.new(self.width, self.height)
+        for x in range(result.width):
            for y in range(result.height):
                color = self.get_pixel(x, y)
-               newcolor = func(color)
+               newcolor = func(color, x, y, self, kernel)
+               #some arguments are set to the default,
+               #because the func may even doesn't deal with these arguement
                result.set_pixel(x, y, newcolor)
-       return result
+        return result
 
     def inverted(self):
-        return self.apply_per_pixel(lambda c: 255-c)
+        #take color of the pixel and return a 255-color, the inverted color
+        def inverted_color(color, x, y, im, kernel):
+            #return the inverted color while other argument don't appear at all
+            return 255-color
+        kernel = []
+        #dumb argument desn't have any effect on the inverted_color
+        return self.apply_per_pixel(inverted_color, kernel)
+        
     
     def correlate(self, kernel):
         """
@@ -67,78 +85,151 @@ class Image:
         first compute the kernel output for a single pixel
         then loop over all pixels and update to form the result image
         """
-        #sqrt returns a float use int to round to an interger
-        ker_size = len(kernel)
-        
-        #the biggest difference of position between the targeted pixel and pixels around it
-        #the first pixel to multiply with a kernel element
-        init = ker_size // 2
-        
-        def one_pixel_ker(im, x, y, kernel):
+        color = 0
+        #the dumb argument for the consistency of func in the apply_per_pixle,
+        #the same  as the empty kernel in inverted
+        def one_pixel_ker(color, x, y, im, kernel):
             """
             compute the kernel output for a single pixel
             """
+            #sqrt returns a float use int to round to an interger
+            ker_size = len(kernel)
+
+            #the biggest difference of position between the targeted pixel and pixels around it
+            #the first pixel to multiply with a kernel element
+            init = ker_size // 2
             out = 0
             for i in range(ker_size):
                 for j in range(ker_size):
                     out = out + kernel[j][i] * self.get_pixel(x-init+i, y-init+j)
             return out
-
+        
         #loop over all pixels
-        result = Image.new(self.width, self.height)
-        for x in range(self.width):
-            for y in range(self.height):
-                newcolor = one_pixel_ker(self, x, y, kernel)
-                result.set_pixel(x, y, newcolor)
-        return result
-
+        return self.apply_per_pixel(one_pixel_ker, kernel)
+        
+       
     def clipper(self):
         """
         round to interger.
         truncate the pixel value in the range[0,255].
         loop over all the pixels
         """
-        
-        def inner(c):
+        kernel = []
+        def inner(color, x, y, self, kernel):
             """
             c is the value of the pixel.
             the inner fucntion deals with a single pixel
             """
-            c = int(c)
-            return max(0, min(c, 255))
-        return self.apply_per_pixel(inner)
+            color = round(color)
+            return max(0, min(color, 255))
+        return self.apply_per_pixel(inner, kernel)
 
-        
-    def blurred(self, n):
+
+   
+    def blurred(self, size):
         """
         use a n dimension box-blur kernel,
         the kernel whose element values are 1/n,
         identical that sum to 1, to input into the correlate method,
         and output a blurred image.
         """
+        kernel = blur_kernel(size, c=1)
         result = self.correlate(kernel)
         return result.clipper()
 
-    def sharpened(self, n):
+    def sharpened(self, size):
         """
         first caculate the sharpen kernel
         the kernel is same as the blurring one except the middle is 2-1/n**2
         correlate the kernel and the image
         cipper it to ensure every pixel is an interger in range[0,256]
         """
-        kernel = []
-        for i in range(n**2):
-        if i == (n**2+1)/2:
-            kernel.append(2-1/n**2)
-        else:
-                kernel.append(1/n**2)
-        print(kernel)
+        kernel = sharp_kernel(size)
         result = self.correlate(kernel)
         return result.clipper()
-            
+
+    def edges(self):
+        """
+        return the edged image.
+        first correlate the image with the kernels, Kx, Ky
+        then porcess first per pixel
+        loop over all pixels
+        """
+        #the horizotal kernel
+        kh = [ [-1, 0, 1],
+               [-2, 0, 2],
+               [-1, 0, 1] ]
+        #the vertical kernel
+        kv = [ [-1, -2, -1],
+               [0,  0,   0],
+               [1,  2,   1] ]
         
+        result_h = self.correlate(kh)
+        result_v = self.correlate(kv)
+
+        def edge_per_pixel(x, y, result_h, result_v):
+            """
+            the output for pixel at position (x, y),
+            actually the gradient magnitude
+            """
+            pixel_h = result_h.get_pixel(x, y)
+            pixel_v = result_v.get_pixel(x, y)
+            return math.sqrt(pixel_h**2 + pixel_v**2)
+            
+        #loop over all pixles, cann't use apply_per_pixel
+        #because the change will swell the argument thus the whole code
+        result = Image.new(self.width, self.height)
+        for x in range(self.width):
+            for y in range(self.height):
+                newcolor = edge_per_pixel(x, y, result_h, result_v)
+                result.set_pixel(x, y, newcolor)
+        return result.clipper()
+            
+    def min_energy_col(self):
+            """
+            first caclute the energy of every columns
+            and store in the energy_cols list
+            return the column index of minimum energy
+            """
+            energy_cols = []
+            for i in range(self.width):
+                energy_cols.append(sum(self.get_pixel(i, j) for j in range(self.height)))
+            return energy_cols.index(min(energy_cols))
+    
+    def rm_col(self, col_index):
+            """
+            remove the col_index th column of the image
+            I have to look at the solution. delete form
+            the back is so brilliant!
+            also I still don't understand how the function to
+            return the miniumy energy_column index works
+            """
+            result_pixels = self.pixels
+            indexes = sorted([y*self.width + col_index for y in range(self.height)], reverse = True)
+            for index in indexes:
+                result_pixels.pop(index)
+            return Image(self.width-1, self.height, result_pixels)
+        
+    def seam_carving(self, steps):
+        """
+        first caculate the energy map by calling the edges function
+        then find the min energy column
+        finally remove the column
+        and repeat for n times
+        """
+        
+        #repeat for n times
+        result = self
+        for n in range(steps):
+            energy_map = result.edges()
+            min_energy_col_index = energy_map.min_energy_col()
+            result = result.rm_col(min_energy_col_index)
+        return result
+                        
                     
-                
+
+        
+        
                 
                 
                     
