@@ -10,6 +10,14 @@ from PIL import Image as PILImage
 
 ## NO ADDITIONAL IMPORTS ALLOWED!
 
+def blur_kernel(size, c=1):
+    """
+    return a box blur kernel if a given size n*n,
+    the parameter c is used to scale the value of
+    the kernel element
+    """
+    return [[c/size**]]
+
 class Image:
     def __init__(self, width, height, pixels):
         self.width = width
@@ -53,14 +61,14 @@ class Image:
     def correlate(self, kernel):
         """
         give back the image munipulated by the kernel;
-        kernel is represented similiarly as the image, a list.
+        kernel is represented as a list of lists, where the sub lists
+        are the rows of the kernel.
         kernel are assumed to be square, and odd demensions.
         first compute the kernel output for a single pixel
         then loop over all pixels and update to form the result image
         """
         #sqrt returns a float use int to round to an interger
-        ker_size = int(math.sqrt(len(kernel)))
-        print(ker_size)
+        ker_size = len(kernel)
         
         #the biggest difference of position between the targeted pixel and pixels around it
         #the first pixel to multiply with a kernel element
@@ -73,7 +81,7 @@ class Image:
             out = 0
             for i in range(ker_size):
                 for j in range(ker_size):
-                    out = out + kernel[j*ker_size+i] * self.get_pixel(x-init+i, y-init+j)
+                    out = out + kernel[j][i] * self.get_pixel(x-init+i, y-init+j)
             return out
 
         #loop over all pixels
@@ -108,9 +116,6 @@ class Image:
         identical that sum to 1, to input into the correlate method,
         and output a blurred image.
         """
-        kernel = []
-        for i in range(n**2):
-            kernel.append(1/n**2)
         result = self.correlate(kernel)
         return result.clipper()
 
@@ -123,9 +128,9 @@ class Image:
         """
         kernel = []
         for i in range(n**2):
-            if i == (n**2+1)/2:
-                kernel.append(2-1/n**2)
-            else:
+        if i == (n**2+1)/2:
+            kernel.append(2-1/n**2)
+        else:
                 kernel.append(1/n**2)
         print(kernel)
         result = self.correlate(kernel)
