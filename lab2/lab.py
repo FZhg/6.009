@@ -145,12 +145,28 @@ def add_path(actor_id_1, actor_id_2, path):
     PATH[(actor_id_2, actor_id_1)] = path.reverse()
 
 
+def min_len_list(neighbors_path):
+    """
+    Argument: a dictionary whose values are lsits of different length or Nones
+    Return: the shortest list, in this case, the shortest path;
+            when the values of the whole dictionary are all Nones
+            return None
+    """
+    shortest_path = []
+    for path in neighbors_path:
+        # update the shortest_path to the first path if it is still
+        # initial empty list
+        if len(path) < len(shortest_path) or shortest_path == []:
+            shortest_path = path
+    return shortest_path
+
+
 def get_path(data, actor_id_1, actor_id_2, count=0):
     """
     first check the data is same before, if not update all
     then look up in the PATH, return path, if it was computed before
-    if not recurse and stores the pathes computed in the PATH.
-    However, the maxium recursion depth is set to be 8 becuse of the 6 
+    if not recurse and stores the pathes computed in the PATH;
+    however, the maxium recursion depth is set to be 8 becuse of the 6 
     degree of seperation. In this case, the function will return None
     to donote that the two actors are not connected by any path.
     Normally, the fourth argument should not be input but the initail zero.
@@ -166,6 +182,7 @@ def get_path(data, actor_id_1, actor_id_2, count=0):
     count = +1
     if count == 8:
         return None
+    print('Count:', count, "\n")
 
     # udpate the globals, if DATA is not same as data
     # or PATH are the initial empty dictionary
@@ -174,36 +191,39 @@ def get_path(data, actor_id_1, actor_id_2, count=0):
         DATA = data
         PATH = two_points_path(DATA)
         ACTED_WITH = find_neighbors(DATA)
-    print(PATH)
-    print(ACTED_WITH)
+    print("PATH:", PATH, '\n')
 
     # look it up in the PATH dictionary
     if (actor_id_1, actor_id_2) in PATH:
         return PATH[(actor_id_1, actor_id_2)]
     # recurse and store
     else:
-        shortest_path = []
+        neighbors_path = []
+        # find the path between neighbors,
+        # the shorted path is chosen
         for neighbor1 in ACTED_WITH[actor_id_1]:
             for neighbor2 in ACTED_WITH[actor_id_2]:
-                # find the path between neighbors,
-                # the shorted path is chosen
+                print("n1, n2:", neighbor1, neighbor2)
                 if neighbor1 != neighbor2:
                     path = get_path(data, neighbor1, neighbor2, count)
-                    # if the path is shorter then the current shortest_path
-                    # shortest_path is undated to be path
-                    # or shorted_path = [], still initials,
-                    # the shortesst_path is updated to be first path
-                    print(path)
-                    if len(path) < len(shortest_path) or shortest_path == []:
-                        shortest_path = path
+                    if path is None:
+                        add_path(neighbor1, neighbor2, None)
+                    else:
+                        neighbors_path.append(path)
+                # when two actors have the same neighbor,
+                # the path is through the neighbor
                 else:
-                    new_path = [actor_id_1, neighbor1, neighbor2, actor_id_2]
-                    add_path(actor_id_1, actor_id_2, new_path)
+                    new_path = [actor_id_1, neighbor1, actor_id_2]
+                    add_path(actor_id_1, new_path, actor_id_2)
                     return new_path
-        # no sequitial neibors
-        new_path = [actor_id_1] + shortest_path.append(actor_id_2)
-        add_path(actor_id_1, actor_id_2, new_path)
-        return new_path
+            shortest_path = min_len_list(neighbors_path)
+            if shortest_path == []:
+                add_path(actor_id_1, actor_id_2, None)
+                return None
+            else:
+                new_path = [actor_id_1] + shortest_path.append(actor_id_2)
+                add_path(actor_id_1, actor_id_2, new_path)
+                return new_path
 
 
 if __name__ == '__main__':
